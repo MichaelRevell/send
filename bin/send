@@ -1,0 +1,100 @@
+#!/usr/bin/ruby
+
+require 'mail'
+require 'optparse'
+require 'ostruct'
+
+# Send mail via Command line
+# This will save your defaults as environment variables so that you do 
+# not have to constantly add them
+# I mainly use this for testing email on different browsers
+
+
+options = OpenStruct.new
+ran = rand(1000)
+options.subject = "This is a test email - #{ran}"
+
+# Get following defaults from environment variables
+# You can set them with EXPORT
+options.from = ENV['send_from']
+options.to =   ENV['send_to']
+options.password = ENV['send_password']
+
+opt_parser = OptionParser.new do |opt|
+  opt.banner = "Usage: send FILE TO"
+  opt.separator  ""
+  opt.separator  "Options"
+
+  opt.on("-x","--export","Export Environment Virables") do
+    puts "What is your gmail email? "
+    system "export send_from=" + gets.chomp
+    puts "What is your gmail password? "
+    system "export send_password=" + gets.chomp
+    puts "Who should we send the email to by default? "
+    system "export send_to=" + gets.chomp
+    exit 0
+  end
+
+  opt.on("-f","--from","Your email address") do |from|
+    options.from = from
+  end
+
+  opt.on("-s","--subject","Email Subject") do |subject|
+    options.subject = subject
+  end
+
+  opt.on("-t","--to","Email address to send to") do |to|
+    options.from = from
+  end
+
+  opt.on("-h","--help","help") do
+    puts opt_parser
+    exit 0
+  end
+end
+
+opt_parser.parse!
+
+
+file = ARGV[0]
+begin
+  body = File.read(file)
+rescue
+  puts "Error: File Could Not be Loaded"
+  exit 1
+end
+if ARGV[1] != nil
+  options.to = ARGV[1]
+end
+
+# Lets see if environment variable are set
+if options.from == nil || options.to == nil || options.password == nil
+  puts "Envronment Variables are not set. Please run send -x to set them"
+  exit 1
+end
+
+Mail.defaults do
+  delivery_method :smtp, { 
+    :address => 'smtp.gmail.com',
+    :port => '587',
+    :user_name => options.from,
+    :password => options.password,
+    :authentication => :plain,
+    :enable_starttls_auto => true
+  }
+end
+
+mail = Mail.new do
+  from    options.from
+  to      options.to
+  subject options.subject
+end
+
+
+html_part = Mail::Part.new do
+  content_type 'text/html; charset=UTF-8'
+  body body
+end
+mail.html_part = html_part
+
+mail.deliver!
