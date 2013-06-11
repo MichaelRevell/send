@@ -1,24 +1,56 @@
-#!/usr/bin/ruby
+#!/usr/bin/env ruby
 
 require 'mail'
 require 'optparse'
 require 'ostruct'
+require 'io/console'
+require 'base64'
 
 # Send mail via Command line
-# This will save your defaults as environment variables so that you do 
+# This will save your defaults as environment variables so that you do
 # not have to constantly add them
 # I mainly use this for testing email on different browsers
 
+OPTIONS = OpenStruct.new
+CONFIG_FNAME = "#{ENV['HOME']}/.send"
 
-options = OpenStruct.new
+def read_config
+  if File.file? CONFIG_FNAME
+    f = open(CONFIG_FNAME)
+    contents = Base64.decode64(f.read)
+    OPTIONS.from = contents.match(/^from=(.*)$/)[1]
+    OPTIONS.to = contents.match(/^to=(.*)$/)[1]
+    OPTIONS.password = contents.match(/^password=(.*)$/)[1]
+    f.close
+  end
+end
+
+def write_config
+  contents = ''
+  contents << "from=#{OPTIONS.from}\n"
+  contents << "to=#{OPTIONS.to}\n"
+  contents << "password=#{OPTIONS.password}"
+  f = open(CONFIG_FNAME, 'w')
+  f.write(Base64.encode64(contents))
+  f.close
+end
+
+def export
+  puts "What is your gmail email? "
+  OPTIONS.from = gets.chomp
+  puts "What is your gmail password? "
+  OPTIONS.password = STDIN.noecho(&:gets).chomp
+  puts "Who should we send the email to by default? "
+  OPTIONS.to = gets.chomp
+  write_config
+end
+
 ran = rand(1000)
-options.subject = "This is a test email - #{ran}"
+OPTIONS.subject = "This is a test email - #{ran}"
 
 # Get following defaults from environment variables
 # You can set them with EXPORT
-options.from = ENV['send_from']
-options.to =   ENV['send_to']
-options.password = ENV['send_password']
+read_config
 
 opt_parser = OptionParser.new do |opt|
   opt.banner = "Usage: send FILE TO"
@@ -26,25 +58,20 @@ opt_parser = OptionParser.new do |opt|
   opt.separator  "Options"
 
   opt.on("-x","--export","Export Environment Virables") do
-    puts "What is your gmail email? "
-    system "export send_from=" + gets.chomp
-    puts "What is your gmail password? "
-    system "export send_password=" + gets.chomp
-    puts "Who should we send the email to by default? "
-    system "export send_to=" + gets.chomp
+    export
     exit 0
   end
 
   opt.on("-f","--from","Your email address") do |from|
-    options.from = from
+    OPTIONS.from = from
   end
 
   opt.on("-s","--subject","Email Subject") do |subject|
-    options.subject = subject
+    OPTIONS.subject = subject
   end
 
   opt.on("-t","--to","Email address to send to") do |to|
-    options.from = from
+    OPTIONS.from = from
   end
 
   opt.on("-h","--help","help") do
@@ -64,30 +91,30 @@ rescue
   exit 1
 end
 if ARGV[1] != nil
-  options.to = ARGV[1]
+  OPTIONS.to = ARGV[1]
 end
 
 # Lets see if environment variable are set
-if options.from == nil || options.to == nil || options.password == nil
+if OPTIONS.from == nil || OPTIONS.to == nil || OPTIONS.password == nil
   puts "Envronment Variables are not set. Please run send -x to set them"
   exit 1
 end
 
 Mail.defaults do
-  delivery_method :smtp, { 
+  delivery_method :smtp, {
     :address => 'smtp.gmail.com',
     :port => '587',
-    :user_name => options.from,
-    :password => options.password,
+    :user_name => OPTIONS.from,
+    :password => OPTIONS.password,
     :authentication => :plain,
     :enable_starttls_auto => true
   }
 end
 
 mail = Mail.new do
-  from    options.from
-  to      options.to
-  subject options.subject
+  from    OPTIONS.from
+  to      OPTIONS.to
+  subject OPTIONS.subject
 end
 
 
